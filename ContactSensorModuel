@@ -1,0 +1,97 @@
+import RPi.GPIO as GPIO
+from time import *
+import grovepi
+from datetime import datetime
+from pyrebase import pyrebase
+from grovepi import *
+
+GPIO.setmode(GPIO.BCM) 
+
+BUTTON = 2
+LED = 4
+DOOR = 3
+DOOR_SENSOR_PIN = 18
+
+config = {
+    "apiKey": "AIzaSyA-yTzWRKUlCCJCqhCnLcACJq6bRPsZvj4",
+    "authDomain": "bait2123-iot-assignment-c2c1b.firebaseapp.com",
+    "databaseURL": "https://bait2123-iot-assignment-c2c1b-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "storageBucket": "bait2123-iot-assignment-c2c1b.appspot.com"
+}
+
+firebase = pyrebase.initialize_app(config)
+auth = firebase.auth()
+user = auth.sign_in_with_email_and_password("rsdg1assignment@gmail.com", "RSDg1*assignment")
+db = firebase.database()
+
+isOpen = None
+oldIsOpen = None 
+
+GPIO.setup(DOOR_SENSOR_PIN, GPIO.IN, pull_up_down = GPIO.PUD_UP)
+pinMode(BUTTON,"INPUT")
+pinMode(LED,"OUTPUT")
+pinMode(DOOR,"OUTPUT")
+
+door_state = True
+lock_state = True
+security = False
+
+def print_intruder_alert():
+    print ("Intruder alert!")
+    now = datetime.now()
+    DateTime = now.strftime("%d/%m/%Y %H:%M:%S")
+    print ("Date and Time: ", DateTime)
+                   
+            #dt = str(DateTime)
+            #data = {"Date and Time":dt}
+            #db.child("breakin").push(data)
+
+    while True:
+        grovepi.digitalWrite(LED, True)   
+        pw = input("Enter password: ")
+                       
+        if pw == "samslai":
+            grovepi.digitalWrite(LED, False)
+            break
+                        
+        elif pw != "samslai":
+            print ("Incorrect password. Try again.")
+            continue
+
+while True:
+    time.sleep(0.1)
+    bStatus = digitalRead(BUTTON)
+    
+    oldIsOpen = isOpen 
+    isOpen = GPIO.input(DOOR_SENSOR_PIN)
+    
+    print(isOpen)
+    print(oldIsOpen)
+    
+    
+           
+    if isOpen == 0 and oldIsOpen == 0 and bStatus == True:
+        door_state = True
+        lock_state = True
+        security = True
+        print ("Close and Locked\n") 
+    
+    if isOpen == 1 and oldIsOpen == 1 and bStatus == True:
+        door_state = False
+        lock_state = True
+        print ("Open and Locked\n")
+    
+    if isOpen == 0 and oldIsOpen == 0 and bStatus == False:
+        door_state = True
+        lock_state = False
+        print ("Close and Unlocked\n")
+        
+    if isOpen == 1 and oldIsOpen == 1 and bStatus == False:
+        door_state = False
+        lock_state = False
+        print ("Open and Unlocked\n")
+     
+    if security == True:
+        if (isOpen and (isOpen != oldIsOpen)):
+            print_intruder_alert()
+            security = False
