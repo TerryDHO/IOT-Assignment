@@ -32,17 +32,19 @@ camera_rotation = 180
 # Initialize the webcam
 camera = cv2.VideoCapture(0)
 
+# Saves the numebr of time the motion sensor is triggered
 pir_count = 0
 
-while True:
+#Check the sensors
+motion_sensor_status = grovepi.digitalRead(pir_sensor)
+
+def detect_motion():
+    while True:
     # Read the sensor state
     pir_state = db.child("pir_sensor_state").get().val()
     
     if pir_state == '1':
         pir_threshold = 100
-        
-        
-        motion_sensor_status = grovepi.digitalRead(pir_sensor)
         
         if motion_sensor_status == 1:
             if pir_threshold > 0:
@@ -52,43 +54,35 @@ while True:
                     print("Motion has been detected in your area")
                     #Get reference from the database
                     images_ref = db.child("images")
-                    #Read the webcam frame
                     
+                    #Capture image using the webcam
                     ret, frame = camera.read()
-                    #Save the image as a JPEG file on the raspberry pi
-                    image_filename = "image.jpg"
                     
-                    cv2.imwrite(image_filename, frame)
+                    #Save the image as a JPEG file on the raspberry pi                   
+                    cv2.imwrite('image.jpg', frame)
+                    
                     #Open the image file and read the image data 
-                    with open(image_filename, "rb") as image_file:
+                    with open('image.jpg', "rb") as image_file:
                         image_data = image_file.read()
-                    
-                    #Encode the image data as a base64 string
-                    image_data = base64.b64encode(image_data)
                     
                     #Get the current date and time and format the date and
                     #time as a string
                     now = datetime.datetime.now()
                     date_time = now.strftime("%Y-%m-%d_%I-%M-%S_%p")
-                
+                                      
+                    # get the URL of the image file
+                    image_url = 'https://bait2123-iot-assignment-c2c1b-default-rtdb.asia-southeast1.firebasedatabase.app/images/image' + 
+                     date_time + '.jpg'
+                                                                                         
                     #Get the reference to the "images" child in the database
                     image_ref = db.child("images")
-                    
-                
-                    #Get a reference to a new child with the unique ID
-                    #(current date and time)
-                    image_ref = images_ref.child(date_time)
-                    
+                                                                         
                     # Save the image to the Firebase Realtime Database
-                    image_ref.set({
-                        "image_data": image_data.decode("utf-8")
-                    })
-                    
+                    image_ref.set(image_url)
+                                                            
                     #Save the image to the "recent_image" datafield
                     recent_image_ref = db.child("recent_image")
-                    recent_image_ref.set({
-                        "image_data": image_data.decode("utf-8")
-                    })
+                    recent_image_ref.set(image_url)
                     
                     #When motion is detected
                     notification_sensor_ref = db.child("notification_sensor")
@@ -105,3 +99,42 @@ while True:
 camera.release()
 # Close all windows
 cv2.destroyAllWindows()
+
+app = Flask(__name__)
+
+@app.route('/')
+def index():
+    # rendering webpage
+    return render_template('index.html')
+
+def gen():
+    # infinite loop
+    while True:
+        # Check for motion with the PIR sensor
+               
+        if motion_sensor_status == 1:
+            detect_motion()                      
+        else:
+            # Release the camera if there is no motion
+            cap.release()
+
+        # Capture frame-by-frame
+        ret, frame = cap.read()
+
+        # Display the resulting frame
+        cv2.imshow('frame', frame)
+
+        # encode the frame in JPEG format
+        ret, jpeg = cv2.imencode('.jpg', frame)
+
+        # yield the output frame in byte format
+        yield (b'--frame\r\n' + b'Content-Type: image/jpeg\r\n\r\n' + jpeg.tobytes() + b'\r\n\r\n')
+
+@app.route('/video_feed')
+def video_feed():
+    # returning response
+    return Response(gen(),
+                    mimetype='multipart/x-mixed-replace; boundary=frame')
+
+if __name__ == '__main__':
+    app.run(host='0.0.0.0', debug=True)
