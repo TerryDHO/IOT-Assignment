@@ -1,0 +1,111 @@
+from grovepi import *
+from time import *
+from grove_rgb_lcd import *
+from pyrebase import pyrebase
+import serial
+
+#initiate the relay
+relay_pin = 2
+
+pinMode(relay_pin, "OUTPUT")
+
+
+#initialize pyrebase app
+config = {
+    "apiKey": "AIzaSyA-yTzWRKUlCCJCqhCnLcACJq6bRPsZvj4",
+    "authDomain": "bait2123-iot-assignment-c2c1b.firebaseapp.com",
+    "databaseURL": "https://bait2123-iot-assignment-c2c1b-default-rtdb.asia-southeast1.firebasedatabase.app",
+    "storageBucket": "bait2123-iot-assignment-c2c1b.appspot.com"
+}
+firebase = pyrebase.initialize_app(config)
+auth = firebase.auth()
+user = auth.sign_in_with_email_and_password("rsdg1assignment@gmail.com", "RSDg1*assignment")
+#Initialize Firestore client
+db = firebase.database()
+
+# Initialize RFID reader
+rpiser1 = serial.Serial('/dev/ttyS0',
+                        baudrate=9600, timeout=1,
+                        bytesize=serial.EIGHTBITS, parity=serial.PARITY_NONE, stopbits=serial.STOPBITS_ONE,
+                        xonxoff=False, rtscts=False, dsrdtr=False)
+rpiser1.flushInput()
+rpiser1.flushOutput()  # Set the RFID reader port
+
+#unlock the solenoid lock
+def unlock_lock():
+    digitalWrite(relay_pin, 1)
+    #relay_pin.on()
+    print("Door Unlocked")
+
+#lock the solenoid lock
+def lock_lock():
+    digitalWrite(relay_pin, 0)
+    #relay_pin.off()
+    print("Door Locked")
+
+#Retrieve key card profile from Firebase Database
+def retrieve_key_card_profile(card_uid):
+    
+    KeyCardDetected = True
+    KeyCardFound = False
+    
+    results = db.child("key_cards").get()
+    for result in results.each():
+        if result.val()["uid"] == card_uid:
+            KeyCardDetected = True
+            KeyCardFound = True
+            return result.val()["profile"]
+        
+    if card_uid == '':
+        KeyCardDetected = False
+        KeyCardFound = False
+        
+    if result.val()["uid"] != card_uid and KeyCardDetected == True:
+        return "Key card not found"
+    
+    if KeyCardFound == False and KeyCardDetected == False:
+        return None 
+    
+#Hard coded key card fake data
+key_card_data = {"uid": "1200082484", "profile": "YHD"}
+db.child("key_cards").push(key_card_data)
+
+lock_lock()
+
+
+# Read key card UID
+    #Door is locked by default
+while True:
+    # Initialize LCD display
+    setRGB(0, 128, 64)
+    setText("Scan RFID card")
+    
+    #Reading key card
+    try:
+        uid = rpiser1.read(14).decode('ascii', errors='ignore')
+    except Exception as e:
+        print("Error reading key card:", e)
+        setText("Error reading key card")
+        
+    #Filter out non-digit characters from UID
+    uid_filtered = ''.join([c for c in uid if c.isdigit()])
+    print(uid_filtered)
+    
+    #retrieve key card profile from Firebase database
+    profile = retrieve_key_card_profile(uid_filtered)
+    
+    #Condition on Key card present, not present or wrong key card
+    if profile == "Key card not found":
+        print("Incorrect\nTry again")
+        setText("Incorrect, try again")
+        lock_lock()
+        time.sleep(8)
+    elif profile == None:
+        setRGB(0, 128, 64)
+        setText("Scan RFID card")
+        lock_lock()
+    elif profile != "Key card not found" or profile != None:
+        setText("Welcome " + profile)
+        unlock_lock()
+        time.sleep(8)
+        
