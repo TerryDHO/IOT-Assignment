@@ -72,7 +72,7 @@ def detect_motion():
                                       
                     # get the URL of the image file
                     image_url = 'https://bait2123-iot-assignment-c2c1b-default-rtdb.asia-southeast1.firebasedatabase.app/images/image' + 
-                     date_time + '.jpg'
+                    date_time + '.jpg'
                                                                                          
                     #Get the reference to the "images" child in the database
                     image_ref = db.child("images")
